@@ -31,20 +31,31 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # Ler a expressão enviada pelo usuário
     expressao = message.content.strip().lower()
 
-    # Reconhecer expressões como 1d20, 3d6 ou 2d17
-    resultado = re.fullmatch(r"(\d*)d(\d+)", expressao)
+    # Reconhecer expressões:
+    # 1d20
+    # 2d20+5
+    # 2#d20
+    # 2#d20+5
+    resultado = re.fullmatch(
+        r"(\d+)([#d])d?(\d+)(?:([+-])(\d+))?",
+        expressao
+    )
 
     if not resultado:
         return
 
-    quantidade_texto, lados_texto = resultado.groups()
+    quantidade_texto, operador, lados_texto, sinal, modificador_texto = resultado.groups()
 
-    # Se o usuário digitar apenas d20, considerar 1d20
-    quantidade = int(quantidade_texto) if quantidade_texto else 1
+    quantidade = int(quantidade_texto)
     lados = int(lados_texto)
+
+    # Calcular modificador
+    modificador = int(modificador_texto) if modificador_texto else 0
+
+    if sinal == "-":
+        modificador *= -1
 
     # Impedir entradas inválidas ou excessivas
     if quantidade < 1 or quantidade > 100:
@@ -65,16 +76,53 @@ async def on_message(message):
         for _ in range(quantidade)
     ]
 
-    total = sum(resultados)
+    # Modo individual (#)
+    if operador == "#":
 
-    # Montar a resposta
-    valores = " + ".join(map(str, resultados))
+        resultados_finais = [
+            valor + modificador
+            for valor in resultados
+        ]
 
-    resposta = (
-        f"🎲 **Rolagem: {quantidade}d{lados}**\n"
-        f"Resultados: {valores}\n"
-        f"**Total: {total}**"
-    )
+        valores = []
+
+        for i in range(quantidade):
+            if modificador != 0:
+                valores.append(
+                    f"{resultados[i]} {'+' if modificador > 0 else '-'} {abs(modificador)} = **{resultados_finais[i]}**"
+                )
+            else:
+                valores.append(
+                    f"**{resultados[i]}**"
+                )
+
+        resposta = (
+            f"🎲 **Rolagem: {quantidade}#d{lados}**\n"
+            + "\n".join(
+                f"Resultado {i+1}: {valores[i]}"
+                for i in range(quantidade)
+            )
+        )
+
+    # Modo agrupado (d)
+    else:
+
+        total_dados = sum(resultados)
+        total = total_dados + modificador
+
+        valores = " + ".join(map(str, resultados))
+
+        if modificador != 0:
+            operacao = (
+                f"{valores} {'+' if modificador > 0 else '-'} {abs(modificador)}"
+            )
+        else:
+            operacao = valores
+
+        resposta = (
+            f"🎲 **Rolagem: {valores}**\n"
+            f"**Total: {total}**"
+        )
 
     await message.channel.send(resposta)
 
